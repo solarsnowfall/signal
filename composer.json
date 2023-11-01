@@ -1,0 +1,12 @@
+{
+  "autoload": {
+    "psr-4": {
+      "Signal\\": "src",
+      "Signal\\Tests\\": "tests"
+    }
+  },
+  "require": {
+    "psr/container": "^2.0",
+    "phpunit/phpunit": "^10.4"
+  }
+}
