@@ -2,7 +2,9 @@
 
 namespace Signal\Reflection;
 
+use ReflectionAttribute;
 use ReflectionProperty;
+use Signal\Reflection\Attributes\Attributes;
 use Signal\Support\Collection;
 
 class Properties extends ClassMembers
@@ -20,17 +22,13 @@ class Properties extends ClassMembers
         return is_null($this->default) || $this->default === $property->isDefault();
     }
 
-    public function get(): Collection
+    /**
+     * @return Collection|ReflectionProperty[]
+     */
+    public function get(): Collection|array
     {
         return Collection::for($this->class->getProperties($this->visibility))
             ->filter(fn(ReflectionProperty $property) => $this->filterProperty($property));
-    }
-
-    public function attributes(): Collection
-    {
-        return $this->get()
-            ->filter(fn(ReflectionProperty $property) => count($property->getAttributes()))
-            ->map(fn(ReflectionProperty $property) => Attributes::for($property)->first());
     }
 
     protected function filterProperty(ReflectionProperty $property): bool

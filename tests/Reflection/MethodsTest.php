@@ -15,7 +15,7 @@ class MethodsTest extends ClassMembersTestAbstract
     {
         return [
             [new Methods(new \ReflectionClass(TestService::class))],
-            [Methods::for(TestService::class)]
+            [Methods::withClass(TestService::class)]
         ];
     }
 
@@ -38,7 +38,7 @@ class MethodsTest extends ClassMembersTestAbstract
     /** @dataProvider instanceProvider */
     public function testGetAbstracts(Methods $instance)
     {
-        $methods = Methods::for(AbstractTestService::class)->abstract(true)->get();
+        $methods = Methods::withClass(AbstractTestService::class)->abstract(true)->get();
         $this->assertCount(static::getExpectedCount(__FUNCTION__), $methods);
 
         foreach ($methods as $method) {
@@ -49,7 +49,7 @@ class MethodsTest extends ClassMembersTestAbstract
     /** @dataProvider instanceProvider */
     public function testGetNonAbstracts(Methods $instance)
     {
-        $methods = Methods::for(AbstractTestService::class)->abstract(false)->get();
+        $methods = Methods::withClass(AbstractTestService::class)->abstract(false)->get();
         $this->assertCount(static::getExpectedCount(__FUNCTION__), $methods);
 
         foreach ($methods as $method) {

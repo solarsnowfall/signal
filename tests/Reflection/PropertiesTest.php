@@ -28,7 +28,7 @@ class PropertiesTest extends ClassMembersTestAbstract
     {
         return [
             [new Properties(new \ReflectionClass(TestService::class))],
-            [Properties::for(TestService::class)]
+            [Properties::withClass(TestService::class)]
         ];
     }
 

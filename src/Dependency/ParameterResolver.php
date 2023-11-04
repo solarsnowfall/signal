@@ -44,9 +44,9 @@ class ParameterResolver
     private function getTypes(): array
     {
         $type = $this->parameter->getType();
-        return !is_a($type, ReflectionNamedType::class)
-            ? $type->getTypes()
-            : [$type];
+        return $type instanceof ReflectionNamedType
+            ? [$type]
+            : $type->getTypes();
     }
 
     /**
@@ -78,10 +78,7 @@ class ParameterResolver
             }
 
             foreach (get_declared_classes() as $class) {
-                if (
-                    $this->container->has($class)
-                    && in_array($type->getName(), class_implements($class))
-                ) {
+                if ($this->container->has($class) && in_array($type->getName(), class_implements($class))) {
                     return $this->container->get($class);
                 }
             }

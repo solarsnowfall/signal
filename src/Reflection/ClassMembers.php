@@ -2,12 +2,21 @@
 
 namespace Signal\Reflection;
 
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
+use Signal\Reflection\Attributes\Attributes;
+use Signal\Traits\WithReflectionClass;
 
 abstract class ClassMembers
 {
+    use WithReflectionClass;
+
+    protected array $filters = [];
+
+    protected array $attributes = [];
+
     protected ?bool $native = null;
 
     protected ?bool $static = null;
@@ -18,9 +27,18 @@ abstract class ClassMembers
         protected readonly ReflectionClass $class
     ) {}
 
-    public static function for(string $objectOrClass): static
+    public function withAttribute(ReflectionAttribute|string $attribute): static
     {
-        return new static(ReflectionFactory::getClass($objectOrClass));
+        if (!is_string($attribute)) {
+            $attribute = $attribute->getName();
+        }
+
+        $this->filters[] = function(ReflectionProperty $property) use ($attribute) {
+            return Attributes::for($property)->has($attribute);
+        };
+
+        $this->attributes[] = $attribute;
+        return $this;
     }
 
     public function native(?bool $native): static

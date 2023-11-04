@@ -3,6 +3,7 @@
 namespace Signal\Reflection;
 
 use InvalidArgumentException;
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
