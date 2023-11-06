@@ -2,21 +2,7 @@
 
 include 'vendor/autoload.php';
 
-$one = new class {
-    #[\Signal\Mapping\Db\Column(name: 'a')]
-    private int $a = 1;
-};
-
-$two = new class {
-    #[\Signal\Mapping\Db\Column(name: 'a')]
-    private ?int $a = null;
-    public function getA()
-    {
-        return $this->a;
-    }
-};
-
-$mapper = \Signal\Mapping\Db\TableRowMapper::withTable('test');
-
-$mapper->mapProperties($two, $one);
-echo $two->getA();
+$cache = new \Signal\Cache\Adapters\FileCache();
+$cache->set('test', 'toast', 100);
+sleep(1);
+var_dump($cache->get('test'));

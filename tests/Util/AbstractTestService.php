@@ -2,8 +2,13 @@
 
 namespace Signal\Tests\Util;
 
+use Serializable;
+use Signal\Tests\Util\Traits\SerializesObject;
+
 abstract class AbstractTestService
 {
+    use SerializesObject;
+
     public $publicNonNativeProperty;
     public static $publicStaticNonNativeProperty;
     protected $protectedNonNativeProperty;
