@@ -14,13 +14,15 @@ abstract class AbstractAdapter implements CacheInterface
     /**
      * @var CacheItem[]
      */
-    private array $deferred = [];
+    protected array $deferred = [];
 
-    abstract protected function getValue(string $key): mixed;
+    abstract protected function serializedStorage(): bool;
+
+    abstract protected function getValue(string $key, mixed $default = null): mixed;
 
     abstract protected function setValue(string $key, mixed $value, DateInterval|int|null $ttl = null): bool;
 
-    abstract protected function deleteValue(string $key): void;
+    abstract protected function deleteValue(string $key): bool;
 
     abstract protected function flush(): bool;
 
@@ -34,6 +36,7 @@ abstract class AbstractAdapter implements CacheInterface
     public function has(string $key): bool
     {
         $this->validateKey($key);
+
         return $this->keyExists($key);
     }
 
@@ -50,12 +53,9 @@ abstract class AbstractAdapter implements CacheInterface
 
     public function delete(string $key): bool
     {
-        if (! $this->has($key)) {
-            return false;
-        }
+        $this->validateKey($key);
 
-        $this->deleteValue($key);
-        return true;
+        return $this->deleteValue($key);
     }
 
     public function deleteMultiple(iterable $keys): bool
@@ -66,7 +66,8 @@ abstract class AbstractAdapter implements CacheInterface
 
         $deleted = true;
         foreach ($keys as $key) {
-            if (!$this->delete($key)) {
+            $this->validateKey($key);
+            if (!$this->deleteValue($key)) {
                 $deleted = false;
             }
         }
@@ -78,7 +79,7 @@ abstract class AbstractAdapter implements CacheInterface
     {
         $values = [];
         foreach ($keys as $key) {
-            $values[$key] = $this->has($key) ? $this->deserialize($this->getValue($key)) : $default;
+            $values[$key] = $this->get($key, $default);
         }
 
         return $values;
@@ -100,10 +101,13 @@ abstract class AbstractAdapter implements CacheInterface
 
     public function getItem(string $key): CacheItemInterface
     {
-        return new CacheItem(
-            key: $key,
-            value: $this->has($key) ? self::get($key) : null
-        );
+        $this->validateKey($key);
+
+        if (isset($this->deferred[$key])) {
+            return clone $this->deferred[$key];
+        }
+
+        return new CacheItem($key, $this->has($key) ? $this->getValue($key) : null);
     }
 
     public function getItems(array $keys = []): iterable
@@ -118,6 +122,8 @@ abstract class AbstractAdapter implements CacheInterface
 
     public function clear(): bool
     {
+        $this->deferred = [];
+
         return $this->flush();
     }
 
@@ -161,23 +167,23 @@ abstract class AbstractAdapter implements CacheInterface
 
     public function validateKey(string $key): void
     {
-        if (! self::testKey($key)) {
+        if (!self::testKey($key)) {
             throw new InvalidCacheKeyException("Invalid key: $key");
         }
     }
 
-    protected function deserialize(string $serialized): mixed
+    private function deserialize(?string $serialized): mixed
     {
-        return unserialize($serialized);
+        return  $this->serializedStorage() ? unserialize($serialized) : $serialized;
     }
 
-    protected function serialize(mixed $value): string
+    private function serialize(mixed $value): string
     {
-        return serialize($value);
+        return $this->serializedStorage() ? serialize($value) : $value;
     }
 
-    protected function testKey(string $key): bool
+    private function testKey(string $key): bool
     {
-        return false !== preg_match("/^[a-z0-9_.]{1,64}$/i", $key);
+        return !preg_match('|[\{\}\(\)/\\\@\:]|', $key);
     }
 }

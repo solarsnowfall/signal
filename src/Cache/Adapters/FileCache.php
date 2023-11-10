@@ -3,117 +3,84 @@
 namespace Signal\Cache\Adapters;
 
 use DateInterval;
-use FilesystemIterator;
 use Generator;
 use InvalidArgumentException;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use Signal\Cache\Ttl;
+use Signal\Filesystem\Adapters\FilesystemInterface;
+use SplFileInfo;
 
 class FileCache extends AbstractAdapter
 {
-    private readonly string $directory;
+    public function __construct(
+        private readonly FilesystemInterface $filesystem
+    ) {}
 
-    public function __construct(string $directory = 'cache')
+    protected function serializedStorage(): bool
     {
-        $this->directory = $this->createDirectory($directory);
+        return true;
     }
 
-    protected function getValue(string $key): mixed
+    protected function getValue(string $key, mixed $default = null): mixed
     {
-        $filename = $this->getFilename($key);
+        if ($this->keyExists($key)) {
+            $raw = $this->filesystem->read($this->getFilename($key));
+            $data = json_decode($raw, true);
 
-        if (!file_exists($filename) || $this->keyExpired($key)) {
-            return null;
+            return is_null($data['e']) || $data['e'] > time() ? $data['v'] : $default;
         }
 
-        return file_get_contents($filename);
-    }
-
-    private function keyExpired(string $key): bool
-    {
-        $filename = $this->getFilename($key);
-        $modified = $this->getFileModificationTime($filename);
-
-        if ($modified === false) {
-            return true;
-        }
-
-        $now = time();
-        if ($now - $modified < $now) {
-            $this->deleteValue($key);
-            return true;
-        }
-
-        return false;
+        return $default;
     }
 
     protected function setValue(string $key, mixed $value, DateInterval|int|null $ttl = null): bool
     {
-        $filename = $this->getFilename($key);
-
-        if (!file_exists($filename)) {
-            $parts = explode(DIRECTORY_SEPARATOR, $filename);
-            $path = '';
-
-            while (count($parts) > 1) {
-                $path .= array_shift($parts);
-                if (!file_exists($path)) {
-                    mkdir($path);
-                }
-                $path .= DIRECTORY_SEPARATOR;
-            }
-        }
-
-        if (false === @file_put_contents($filename, $value)) {
-            return false;
-        }
-
         $seconds = Ttl::secondsLeft($ttl);
 
-        if ($seconds && !@touch($filename, $seconds)) {
-            unlink($filename);
+        if (!is_null($seconds) && $seconds < 0) {
             return false;
+        }
+
+        $filename = $this->getFilename($key);
+        $expiration = !is_null($seconds) ? time() + $seconds : null;
+        $value = json_encode(['v' => $value, 'e' => $expiration]);
+        $this->filesystem->write($filename, $value);
+
+        return true;
+    }
+
+    protected function deleteValue(string $key): bool
+    {
+        $this->filesystem->delete($this->getFilename($key));
+
+        return true;
+    }
+
+    protected function flush(): bool
+    {
+        foreach ($this->filesystem->listDirectory('') as $file) {
+            $this->filesystem->delete($file->getPathname());
         }
 
         return true;
     }
 
-    protected function deleteValue(string $key): void
-    {
-        @unlink($this->getFilename($key));
-    }
-
-    protected function flush(): bool
-    {
-        $flushed = true;
-        foreach ($this->listFiles() as $filename) {
-            if (false === $this->deleteValue($filename)) {
-                $flushed = false;
-            }
-        }
-
-        return $flushed;
-    }
-
     protected function keyExists(string $key): bool
     {
-        return @file_exists($this->getFilename($key)) && !$this->keyExpired($key);
-    }
+        $filename = $this->getFilename($key);
 
-    private function createDirectory($directory): string
-    {
-        $path = $directory;
+        if ($this->filesystem->fileExists($filename)) {
+            $mtime = $this->filesystem->lastModified($filename);
 
-        if (!file_exists($path) && false === @mkdir($path)) {
-            throw new InvalidArgumentException("Unable to create cache directory: $path");
+            if ($mtime && time() > $mtime) {
+                $this->filesystem->delete($filename);
+
+                return false;
+            }
+
+            return true;
         }
 
-        if (!is_writable($path)) {
-            throw new InvalidArgumentException("Path can't be written to: $path");
-        }
-
-        return $path;
+        return false;
     }
 
     private function getFilename(string $key): string
@@ -122,25 +89,16 @@ class FileCache extends AbstractAdapter
         $path = str_split(substr($hash, 0, 2));
         $path[] = substr($hash, 2);
 
-        return $this->directory . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $path);
+        return implode(DIRECTORY_SEPARATOR, $path);
     }
 
-    private function getFileModificationTime(string $filename): int|false
+    private function cleanup(): void
     {
-        return @filemtime($filename);
-    }
-
-    private function listFiles(): Generator
-    {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator(
-                $this->directory,
-                FilesystemIterator::SKIP_DOTS
-            )
-        );
-
-        foreach ($iterator as $filename) {
-            yield $filename;
+        /** @var SplFileInfo $file */
+        foreach ($this->filesystem->listDirectory('') as $file) {
+            if (time() > $this->filesystem->lastModified($file->getRealPath())) {
+                $this->filesystem->delete($file->getRealPath());
+            }
         }
     }
 }

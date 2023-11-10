@@ -9,6 +9,7 @@
     "psr/container": "^2.0",
     "phpunit/phpunit": "^10.4",
     "psr/simple-cache": "^3.0",
-    "psr/cache": "^3.0"
+    "psr/cache": "^3.0",
+    "psr/http-message": "^2.0"
   }
 }

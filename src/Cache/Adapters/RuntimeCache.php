@@ -7,53 +7,47 @@ use Signal\Cache\Ttl;
 
 class RuntimeCache extends AbstractAdapter
 {
-    protected array $cache = [];
+    private array $values = [];
+    private array $expirations = [];
 
-    protected array $expirations = [];
-
-    protected array $deferred = [];
-
-    protected function setValue(string $key, mixed $value, DateInterval|int|null $ttl = null): bool
+    protected function serializedStorage(): bool
     {
-        $this->cache[$key] = $this->serialize($value);
-        $this->expirations[$key] = Ttl::secondsLeft($ttl);
         return true;
     }
 
-    protected function deleteValue(string $key): void
+    protected function getValue(string $key, mixed $default = null): mixed
     {
-        unset($this->cache[$key], $this->expirations[$key], $this->deferred[$key]);
+        return $this->values[$key] ?? $default;
     }
 
-    protected function keyExists(string $key): bool
+    protected function setValue(string $key, mixed $value, DateInterval|int|null $ttl = null): bool
     {
-        if (array_key_exists($key, $this->cache)) {
-            $expiration = $this->expirations[$key];
+        $this->values[$key] = $value;
+        $this->expirations[$key] = Ttl::timestamp($ttl);
 
-            if (null !== $expiration && $expiration < time()) {
-                $this->deleteValue($key);
-                return false;
-            }
-
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
-    protected function getValue(string $key): mixed
+    protected function deleteValue(string $key): bool
     {
-        return $this->cache[$key];
+        unset($this->values[$key], $this->expirations[$key], $this->deferred[$key]);
+
+        return true;
     }
 
     protected function flush(): bool
     {
-        $this->cache = $this->expirations = $this->deferred = [];
+        $this->values = $this->expirations = [];
+
         return true;
     }
 
-    public function deleteItems(array $keys): bool
+    protected function keyExists(string $key): bool
     {
-        return $this->deleteMultiple($keys);
+        if (array_key_exists($key, $this->values)) {
+            return !Ttl::expired($this->expirations[$key]);
+        }
+
+        return false;
     }
 }
