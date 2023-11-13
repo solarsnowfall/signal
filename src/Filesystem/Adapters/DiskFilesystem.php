@@ -14,7 +14,9 @@ class DiskFilesystem implements FilesystemInterface
     public function __construct(
         private readonly string $location
     ) {
-        $this->createDirectoryIfMissing($this->location);
+        if (!empty($this->location)) {
+            $this->createDirectoryIfMissing($this->location);
+        }
     }
 
     private function createDirectoryIfMissing(string $location): void
@@ -23,17 +25,7 @@ class DiskFilesystem implements FilesystemInterface
             return;
         }
 
-        error_clear_last();
-
-        if (!@mkdir($location, '0775', true)) {
-            $error = error_get_last();
-        }
-
-        clearstatcache(true, $location);
-
-        if (!is_dir($location)) {
-            throw new RuntimeException(__METHOD__ . ': ' . ($error['message'] ?? ''));
-        }
+        $this->handleError(fn() => mkdir($location, '0775', true));
     }
 
     public function fileExists(string $path): bool
@@ -51,36 +43,26 @@ class DiskFilesystem implements FilesystemInterface
         $location = $this->getLocation($path);
         $this->createDirectoryIfMissing(dirname($location));
 
-        if (false === @file_put_contents($location, $contents)) {
-            throw new RuntimeException(__METHOD__ . ': ' . (error_get_last()['message'] ?? ''));
-        }
+        $this->handleError(fn() => file_put_contents($location, $contents));
     }
 
     public function read(string $path): string
     {
-        error_clear_last();
-        $contents = @file_get_contents($this->getLocation($path));
-
-        if (false === $contents) {
-            throw new RuntimeException(__METHOD__ . ': ' . (error_get_last()['message'] ?? ''));
-        }
-
-        return $contents;
+        return $this->handleError(fn() => file_get_contents($this->getLocation($path)));
     }
 
     public function delete(string $path): void
     {
         $location = $this->getLocation($path);
+        echo "$location\n";
 
         if (!file_exists($location)) {
             return;
         }
 
-        error_clear_last();
+        $this->handleError(fn() => unlink($location));
 
-        if (!@unlink($location)) {
-            throw new RuntimeException(__METHOD__ . ': ' . (error_get_last()['message'] ?? ''));
-        }
+        error_clear_last();
     }
 
     public function deleteDirectory(string $path): void
@@ -97,9 +79,7 @@ class DiskFilesystem implements FilesystemInterface
             }
         }
 
-        if (!rmdir($location)) {
-            throw new RuntimeException("Unable to delete directory: $location");
-        }
+        $this->handleError(fn() => rmdir($location));
     }
 
     protected function deleteFile(SplFileInfo $file): bool
@@ -122,23 +102,12 @@ class DiskFilesystem implements FilesystemInterface
             return;
         }
 
-        error_clear_last();
-
-        if (!@mkdir($location)) {
-            throw new RuntimeException(error_get_last()['message'] ?? '');
-        }
+        $this->handleError(fn() => mkdir($this->getLocation($path)));
     }
 
     public function lastModified(string $path): int|false
     {
-        error_clear_last();
-        $mtime = @filemtime($this->getLocation($path));
-
-        if (false === $mtime) {
-            throw new RuntimeException(error_get_last()['message'] ?? '');
-        }
-
-        return $mtime;
+        return $this->handleError(fn() => filemtime($this->getLocation($path)));
     }
 
     public function setLastModified(string $path, ?int $mtime = null)
@@ -163,9 +132,7 @@ class DiskFilesystem implements FilesystemInterface
         $sourceLocation = $this->getLocation($source);
         $destinationLocation = $this->getLocation($destination);
 
-        if (!@rename($sourceLocation, $destinationLocation)) {
-            throw new RuntimeException(error_get_last()['message'] ?? '');
-        }
+        $this->handleError(fn() => rename($sourceLocation, $destinationLocation));
     }
 
     public function copy(string $source, string $destination): void
@@ -173,9 +140,7 @@ class DiskFilesystem implements FilesystemInterface
         $sourceLocation = $this->getLocation($source);
         $destinationLocation = $this->getLocation($destination);
 
-        if (!@copy($sourceLocation, $destinationLocation)) {
-            throw new RuntimeException(error_get_last()['message'] ?? '');
-        }
+        $this->handleError(fn() => copy($sourceLocation, $destinationLocation));
     }
 
     /**
@@ -184,13 +149,15 @@ class DiskFilesystem implements FilesystemInterface
      */
     public function listDirectory(string $path): Generator
     {
-        if (!is_dir($path)) {
+        $location = $this->getLocation($path);
+
+        if (!is_dir($location)) {
             return;
         }
 
         yield from new RecursiveIteratorIterator(
             iterator: new RecursiveDirectoryIterator(
-                directory: $path,
+                directory: $location,
                 flags: FilesystemIterator::SKIP_DOTS
             ),
             mode: RecursiveIteratorIterator::CHILD_FIRST
@@ -199,10 +166,24 @@ class DiskFilesystem implements FilesystemInterface
 
     private function getLocation(string $path): string
     {
-        if (!str_starts_with($this->location, $path)) {
+        if (!str_starts_with($path, $this->location)) {
             $path = $this->location . DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR);
         }
 
         return $path;
+    }
+
+    private function handleError(callable $callback): mixed
+    {
+        set_error_handler(function(int $code, string $message) {
+                throw new \ErrorException($message, $code);
+            },
+            E_ALL
+        );
+
+        $result = $callback();
+        restore_error_handler();
+
+        return $result;
     }
 }

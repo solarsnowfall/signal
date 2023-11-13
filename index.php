@@ -2,7 +2,7 @@
 
 include 'vendor/autoload.php';
 
-$cache = new \Signal\Cache\Adapters\FileCache();
-$cache->set('test', 'toast', 100);
-sleep(1);
-var_dump($cache->get('test'));
+$disk = new \Signal\Filesystem\Adapters\DiskFilesystem('tests/Cache/cache');
+foreach ($disk->listDirectory('') as $file) {
+    echo "{$file->getPathname()}\n";
+}
